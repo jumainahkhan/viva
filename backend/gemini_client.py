@@ -18,7 +18,8 @@ _client = genai.Client(api_key=GEMINI_API_KEY)
 # Tried in order when a model is overloaded (503) or out of quota (429).
 _LITE = "gemini-3.5-flash-lite"
 CHAINS = {
-    "fast": list(dict.fromkeys([GEMINI_MODEL_FAST, GEMINI_MODEL_SMART, _LITE])),
+    "lite": list(dict.fromkeys([_LITE, GEMINI_MODEL_FAST, GEMINI_MODEL_SMART])),
+    "fast": list(dict.fromkeys([GEMINI_MODEL_FAST, _LITE, GEMINI_MODEL_SMART])),
     "smart": list(dict.fromkeys([GEMINI_MODEL_SMART, GEMINI_MODEL_FAST, _LITE])),
 }
 _RETRYABLE = {429, 500, 503, 504}
@@ -52,8 +53,10 @@ async def generate(
                 last_error = e
                 if e.code not in _RETRYABLE:
                     raise
-                log.warning("%s attempt %d failed with %s; retrying", model, attempt + 1, e.code)
-                await asyncio.sleep(0.5 * (attempt + 1))
+                log.warning("%s attempt %d failed with %s", model, attempt + 1, e.code)
+                if e.code == 429:  # per-model quota: waiting won't help, try the next model
+                    break
+                await asyncio.sleep(0.5)
             except ValueError as e:  # malformed JSON from the model
                 last_error = e
                 log.warning("%s returned unparsable output: %s", model, e)
