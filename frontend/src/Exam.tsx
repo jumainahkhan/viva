@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { sendAnswer, type Assessment, type ProfessorId, type SessionResponse, type Turn } from './api'
 import { WavRecorder } from './recorder'
-import { AgentBadge, Avatar, PROFESSOR_IDS, PROFESSORS, SpeakingBars, ThinkingDots, TopBar } from './professors'
+import { BLUFF_THRESHOLD, Button, Marker, PROFESSOR_IDS, PROFESSORS, ProfName, TopBar } from './professors'
 
 type Phase = 'speaking' | 'listening' | 'recording' | 'conferring'
 
@@ -20,13 +20,14 @@ export default function Exam({ session, onFinish }: { session: SessionResponse; 
   const [phase, setPhase] = useState<Phase>('speaking')
   const [history, setHistory] = useState<Exchange[]>([])
   const [pendingSpoken, setPendingSpoken] = useState(false)
-  const [tab, setTab] = useState<'transcript' | 'agents'>('agents')
+  const [tab, setTab] = useState<'log' | 'transcript'>('log')
   const [typing, setTyping] = useState(false)
   const [typed, setTyped] = useState('')
   const [error, setError] = useState('')
   const [hint, setHint] = useState('')
   const [needsTap, setNeedsTap] = useState(false)
   const [level, setLevel] = useState(0)
+  const [elapsed, setElapsed] = useState(0)
 
   const audio = useRef<HTMLAudioElement>(new Audio())
   const recorder = useRef<WavRecorder | null>(null)
@@ -57,6 +58,14 @@ export default function Exam({ session, onFinish }: { session: SessionResponse; 
       recorder.current?.close()
     }
   }, [])
+
+  useEffect(() => {
+    if (phase !== 'recording') return
+    setElapsed(0)
+    const started = Date.now()
+    const id = setInterval(() => setElapsed(Math.floor((Date.now() - started) / 1000)), 250)
+    return () => clearInterval(id)
+  }, [phase])
 
   const submit = useCallback(
     async (answer: { audio?: Blob; text?: string; skip?: boolean }) => {
@@ -102,7 +111,7 @@ export default function Exam({ session, onFinish }: { session: SessionResponse; 
       await recorder.current.start()
       setPhase('recording')
     } catch {
-      setError('We could not access your microphone. Allow it in the browser, or type your answer instead.')
+      setError('Microphone access is blocked. Allow it in the browser, or type your answer.')
       setTyping(true)
       setPhase('listening')
     }
@@ -113,7 +122,7 @@ export default function Exam({ session, onFinish }: { session: SessionResponse; 
     const { wav, seconds } = recorder.current.stop()
     setLevel(0)
     if (seconds < 0.7) {
-      setHint('Hold the button (or Space) the whole time you speak, then let go.')
+      setHint('Hold the button or Space for the whole answer, then release.')
       setPhase('listening')
       return
     }
@@ -140,96 +149,83 @@ export default function Exam({ session, onFinish }: { session: SessionResponse; 
     }
   }, [startRecording, stopRecording])
 
-  const speaker = PROFESSORS[turn.speaker]
   const answered = history.length
-  const last = history.at(-1)
-  const lastScores = Object.fromEntries((last?.assessments ?? []).map((a) => [a.professor, a])) as Record<ProfessorId, Assessment | undefined>
+  const lastScores = Object.fromEntries((history.at(-1)?.assessments ?? []).map((a) => [a.professor, a])) as Record<ProfessorId, Assessment | undefined>
+  const clock = `${Math.floor(elapsed / 60)}:${String(elapsed % 60).padStart(2, '0')}`
 
   return (
     <>
       <TopBar
         right={
-          <div className="flex items-center gap-3">
-            <span className="hidden text-sm font-medium text-muted sm:inline">
-              {turn.end_exam ? 'All questions answered' : `Question ${turn.question_number} of ${turn.total_questions}`}
-            </span>
-            <div className="h-2 w-28 overflow-hidden rounded-full bg-black/5 sm:w-40" role="progressbar" aria-label="Exam progress" aria-valuemin={0} aria-valuemax={turn.total_questions} aria-valuenow={answered}>
-              <div className="h-full rounded-full bg-practitioner transition-all duration-700" style={{ width: `${Math.min(1, answered / turn.total_questions) * 100}%` }} />
+          <div className="flex items-center gap-3 text-sm">
+            <span className="tabular-nums">{turn.end_exam ? 'All questions answered' : `Question ${turn.question_number} of ${turn.total_questions}`}</span>
+            <div className="flex" aria-hidden>
+              {Array.from({ length: turn.total_questions }, (_, i) => (
+                <span key={i} className={`-ml-px h-3 w-5 border border-ink first:ml-0 ${i < answered ? 'bg-ink' : ''}`} />
+              ))}
             </div>
           </div>
         }
       />
-      <div className="mx-auto grid max-w-7xl gap-6 px-4 pb-16 pt-6 sm:px-6 lg:grid-cols-[minmax(0,1fr)_400px] lg:gap-8">
+      <div className="mx-auto grid max-w-7xl gap-8 px-4 pb-16 pt-6 sm:px-6 lg:grid-cols-[minmax(0,1fr)_420px]">
         {/* ---------- Main column ---------- */}
         <div className="min-w-0">
-          <div className="mb-5 flex flex-wrap items-center gap-2">
-            <p className="text-sm font-medium text-muted">{session.blueprint.course_title}</p>
-            <span className="rounded-full bg-white px-3 py-1 text-sm font-medium shadow-sm ring-1 ring-black/5">Topic: {turn.topic_title}</span>
-          </div>
+          <p className="text-sm text-muted">{session.blueprint.course_title}</p>
+          <p className="mt-0.5 font-semibold">Topic: {turn.topic_title}</p>
 
-          <section aria-label="Exam panel" className="grid grid-cols-3 gap-2 sm:gap-4">
-            {PROFESSOR_IDS.map((id) => {
+          <section aria-label="Examining panel" className="mt-5 grid grid-cols-3">
+            {PROFESSOR_IDS.map((id, i) => {
               const p = PROFESSORS[id]
               const active = id === turn.speaker && phase !== 'conferring'
               const score = lastScores[id]
               return (
-                <div
-                  key={id}
-                  className={`flex flex-col items-center rounded-2xl bg-white p-3 text-center shadow-sm ring-1 transition-all duration-300 sm:p-5 ${
-                    active ? `ring-2 ${p.ring} shadow-md` : 'ring-black/5'
-                  } ${!active && phase !== 'conferring' ? 'opacity-70' : ''}`}
-                >
-                  <Avatar id={id} size="lg" />
-                  <p className={`mt-2 text-sm font-semibold sm:text-base ${p.text}`}>{p.name}</p>
-                  <AgentBadge className="mt-1 hidden sm:inline-flex" />
-                  <p className="mt-1 hidden text-xs text-muted md:block">Tuned: {session.panel.strictness[id]}</p>
-                  <div className={`mt-2 flex h-5 items-center gap-1.5 text-xs font-medium ${p.text}`}>
-                    {phase === 'conferring' ? (
-                      <><ThinkingDots /> <span className="hidden sm:inline">assessing</span></>
-                    ) : active && phase === 'speaking' ? (
-                      <><SpeakingBars /> <span className="hidden sm:inline">speaking</span></>
-                    ) : active ? (
-                      <span className="hidden sm:inline">waiting for you</span>
-                    ) : score ? (
-                      <span className="text-muted">scored {score.score_0_to_10}/10</span>
-                    ) : null}
-                  </div>
+                <div key={id} className={`border px-3 py-3 sm:px-4 ${i > 0 ? '-ml-px' : ''} ${active ? `${p.bg} ${p.border} relative text-white` : 'border-ink'}`}>
+                  <p className="condensed flex items-center gap-1.5 text-lg font-bold sm:text-xl">
+                    {!active && <Marker id={id} />}
+                    {p.name}
+                  </p>
+                  <p className={`mt-0.5 text-xs sm:text-sm ${active ? 'text-white/80' : 'text-muted'}`}>
+                    {p.manner} · {session.panel.strictness[id]}
+                  </p>
+                  <p className="mt-2 text-sm font-medium">
+                    {phase === 'conferring'
+                      ? 'Assessing…'
+                      : active
+                        ? phase === 'speaking' ? 'Speaking' : 'Waiting for your answer'
+                        : score
+                          ? <span className="tabular-nums">Last score {score.score_0_to_10}/10</span>
+                          : ' '}
+                  </p>
                 </div>
               )
             })}
           </section>
 
-          <section aria-live="polite" className={`mt-6 rounded-3xl border-l-4 bg-white p-5 shadow-sm ring-1 ring-black/5 sm:p-7 ${phase === 'conferring' ? 'border-black/10' : speaker.border}`}>
+          <section aria-live="polite" className="mt-6 border border-ink p-5 sm:p-7">
             {phase === 'conferring' ? (
-              <div className="flex items-center gap-3 text-lg text-muted">
-                <ThinkingDots /> The panel is conferring. Three agents are assessing your answer in parallel…
-              </div>
+              <p className="text-lg text-muted">The panel is assessing your answer.</p>
             ) : (
               <>
-                <div className="mb-2 flex items-center justify-between gap-2">
-                  <p className={`font-semibold ${speaker.text}`}>{speaker.name} asks</p>
-                  <button type="button" onClick={play} className="rounded-lg px-2.5 py-1 text-sm font-medium text-muted hover:bg-black/5">↻ Replay</button>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <ProfName id={turn.speaker} className={PROFESSORS[turn.speaker].text} />
+                  <Button variant="link" className="text-sm" onClick={play}>Replay question</Button>
                 </div>
-                <p className="font-display text-xl leading-snug sm:text-2xl">{turn.question}</p>
-                {needsTap && (
-                  <button type="button" onClick={play} className={`mt-3 rounded-xl ${speaker.soft} ${speaker.text} px-4 py-2 font-medium`}>▶ Tap to hear the question</button>
-                )}
+                <p className="mt-3 font-serif text-2xl leading-snug sm:text-[1.75rem]">{turn.question}</p>
+                {needsTap && <Button variant="secondary" className="mt-4" onClick={play}>Play question audio</Button>}
               </>
             )}
           </section>
 
-          <section className="mt-8 flex flex-col items-center" aria-label="Answer controls">
+          <section className="mt-6" aria-label="Answer">
             {turn.end_exam ? (
-              <button type="button" onClick={onFinish} className="rounded-2xl bg-ink px-8 py-4 text-lg font-semibold text-white shadow-sm hover:bg-black">
-                See my grade and analysis →
-              </button>
+              <Button className="w-full py-4 text-lg" onClick={onFinish}>View results</Button>
             ) : typing ? (
-              <form className="w-full max-w-2xl" onSubmit={(e) => { e.preventDefault(); if (typed.trim()) submit({ text: typed }) }}>
-                <label htmlFor="typed" className="sr-only">Your answer</label>
+              <form onSubmit={(e) => { e.preventDefault(); if (typed.trim()) submit({ text: typed }) }}>
+                <label htmlFor="typed" className="mb-1.5 block font-semibold">Your answer</label>
                 <textarea
                   id="typed"
                   autoFocus
-                  rows={3}
+                  rows={4}
                   value={typed}
                   onChange={(e) => setTyped(e.target.value)}
                   onKeyDown={(e) => {
@@ -238,81 +234,78 @@ export default function Exam({ session, onFinish }: { session: SessionResponse; 
                       if (typed.trim()) submit({ text: typed })
                     }
                   }}
-                  placeholder="Type your answer as you would say it…"
-                  className="w-full rounded-2xl border border-black/15 bg-white p-4 text-lg shadow-sm"
+                  placeholder="Write the answer as you would say it. Enter submits; Shift+Enter adds a line."
+                  className="w-full border border-ink p-4 text-lg"
                   disabled={phase === 'conferring'}
                 />
-                <div className="mt-2 flex justify-between">
-                  <button type="button" onClick={() => setTyping(false)} className="rounded-xl px-3 py-2 text-sm font-medium text-muted hover:bg-black/5">🎙 Use my voice instead</button>
-                  <button type="submit" disabled={!typed.trim() || phase === 'conferring'} className="rounded-xl bg-ink px-5 py-2 font-semibold text-white disabled:opacity-30">Send answer</button>
+                <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+                  <Button variant="link" onClick={() => setTyping(false)}>Answer by voice</Button>
+                  <Button type="submit" disabled={!typed.trim() || phase === 'conferring'}>Submit answer</Button>
                 </div>
               </form>
             ) : (
               <>
-                <div className="relative">
-                  {phase === 'recording' && (
-                    <span aria-hidden className="mic-ripple absolute inset-0 rounded-full bg-skeptic" style={{ transform: `scale(${1 + level * 0.5})` }} />
-                  )}
-                  <button
-                    type="button"
-                    aria-label={phase === 'recording' ? 'Recording. Release to send your answer' : 'Hold to record your answer'}
-                    disabled={phase === 'conferring'}
-                    onPointerDown={(e) => { e.preventDefault(); startRecording() }}
-                    onPointerUp={stopRecording}
-                    onPointerLeave={stopRecording}
-                    onContextMenu={(e) => e.preventDefault()}
-                    className={`relative grid h-24 w-24 touch-none select-none place-items-center rounded-full text-white shadow-lg transition ${
-                      phase === 'recording' ? 'scale-110 bg-skeptic' : 'bg-ink hover:scale-105'
-                    } disabled:opacity-30`}
-                  >
+                <button
+                  type="button"
+                  aria-label={phase === 'recording' ? 'Recording. Release to submit your answer' : 'Hold to record your answer'}
+                  disabled={phase === 'conferring'}
+                  onPointerDown={(e) => { e.preventDefault(); startRecording() }}
+                  onPointerUp={stopRecording}
+                  onPointerLeave={stopRecording}
+                  onContextMenu={(e) => e.preventDefault()}
+                  className={`flex w-full touch-none select-none items-center justify-between gap-4 border px-5 py-4 text-left text-lg font-semibold disabled:opacity-30 ${
+                    phase === 'recording' ? 'border-skeptic bg-skeptic text-white' : 'border-ink bg-ink text-white hover:bg-black'
+                  }`}
+                >
+                  <span className="flex items-center gap-3">
                     <MicIcon />
-                  </button>
-                </div>
-                <p className="mt-4 text-center font-medium" aria-live="polite">
-                  {phase === 'recording' && 'Listening… release when you are done'}
-                  {phase === 'speaking' && 'Listen to the question…'}
-                  {phase === 'listening' && 'Take a moment to think. Then hold Space (or the button) and answer.'}
-                  {phase === 'conferring' && 'Your answer is with the panel.'}
+                    {phase === 'recording' ? <span className="tabular-nums">Recording {clock}</span> : 'Hold to answer'}
+                  </span>
+                  {phase === 'recording' ? (
+                    <span className="h-2 w-24 border border-white/60" aria-hidden><span className="block h-full bg-white" style={{ width: `${level * 100}%` }} /></span>
+                  ) : (
+                    <kbd className="border border-white/50 px-2 py-0.5 font-sans text-sm font-medium">Space</kbd>
+                  )}
+                </button>
+                <p className="mt-2 text-sm text-muted" aria-live="polite">
+                  {phase === 'recording' && 'Release to submit.'}
+                  {phase === 'speaking' && 'The examiner is speaking.'}
+                  {phase === 'listening' && 'Hold Space or the button while you answer; release to submit.'}
+                  {phase === 'conferring' && 'Answer submitted.'}
                 </p>
                 {hint && <p className="mt-1 text-sm text-skeptic">{hint}</p>}
               </>
             )}
 
-            {error && <p role="alert" className="mt-4 rounded-xl bg-skeptic-soft px-4 py-3 text-skeptic">{error}</p>}
+            {error && <p role="alert" className="mt-4 border border-skeptic px-4 py-3 text-skeptic">{error}</p>}
 
             {!turn.end_exam && (
-              <div className="mt-5 flex flex-wrap justify-center gap-2">
-                {!typing && (
-                  <button type="button" onClick={() => setTyping(true)} disabled={phase === 'conferring'} className="rounded-xl border border-black/10 bg-white px-4 py-2 text-sm font-medium hover:bg-black/[0.03] disabled:opacity-40">⌨ Type instead</button>
-                )}
-                <button type="button" onClick={() => submit({ skip: true })} disabled={phase === 'conferring'} className="rounded-xl border border-black/10 bg-white px-4 py-2 text-sm font-medium hover:bg-black/[0.03] disabled:opacity-40">I'm not sure, next question</button>
+              <div className="mt-4 flex flex-wrap gap-5">
+                {!typing && <Button variant="link" onClick={() => setTyping(true)} disabled={phase === 'conferring'}>Type answer</Button>}
+                <Button variant="link" onClick={() => submit({ skip: true })} disabled={phase === 'conferring'}>Skip question</Button>
               </div>
             )}
           </section>
         </div>
 
-        {/* ---------- Sidebar: transcript + agent activity ---------- */}
-        <aside className="lg:sticky lg:top-24 lg:self-start">
-          <div className="flex max-h-[calc(100vh-8rem)] flex-col rounded-3xl bg-white shadow-sm ring-1 ring-black/5">
-            <div className="flex gap-1 border-b border-black/5 p-2" role="tablist">
-              {(['agents', 'transcript'] as const).map((t) => (
+        {/* ---------- Sidebar ---------- */}
+        <aside className="lg:sticky lg:top-6 lg:self-start">
+          <div className="flex max-h-[calc(100vh-3rem)] flex-col border border-ink">
+            <div className="flex border-b border-ink" role="tablist">
+              {(['log', 'transcript'] as const).map((t, i) => (
                 <button
                   key={t}
                   role="tab"
                   aria-selected={tab === t}
                   onClick={() => setTab(t)}
-                  className={`flex-1 rounded-xl px-3 py-2 text-sm font-semibold transition ${tab === t ? 'bg-ink text-white' : 'text-muted hover:bg-black/5'}`}
+                  className={`flex-1 px-3 py-2.5 text-sm font-semibold ${i > 0 ? 'border-l border-ink' : ''} ${tab === t ? 'bg-ink text-white' : 'hover:bg-black/[0.04]'}`}
                 >
-                  {t === 'agents' ? 'Agent activity' : `Transcript (${answered})`}
+                  {t === 'log' ? 'Panel log' : `Transcript (${answered})`}
                 </button>
               ))}
             </div>
             <div className="overflow-y-auto p-4">
-              {tab === 'agents' ? (
-                <AgentFeed history={history} phase={phase} pendingSpoken={pendingSpoken} panel={session.panel} />
-              ) : (
-                <Transcript history={history} current={turn} />
-              )}
+              {tab === 'log' ? <PanelLog history={history} phase={phase} pendingSpoken={pendingSpoken} panel={session.panel} /> : <Transcript history={history} current={turn} />}
             </div>
           </div>
         </aside>
@@ -321,16 +314,17 @@ export default function Exam({ session, onFinish }: { session: SessionResponse; 
   )
 }
 
-function AgentFeed({ history, phase, pendingSpoken, panel }: { history: Exchange[]; phase: Phase; pendingSpoken: boolean; panel: SessionResponse['panel'] }) {
+function PanelLog({ history, phase, pendingSpoken, panel }: { history: Exchange[]; phase: Phase; pendingSpoken: boolean; panel: SessionResponse['panel'] }) {
+  const threshold = BLUFF_THRESHOLD[panel.strictness.skeptic]
   return (
-    <div className="space-y-5 text-sm">
+    <div className="space-y-6 text-sm">
       {phase === 'conferring' && (
-        <div className="rounded-2xl bg-paper p-3">
-          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">Working now</p>
-          <ul className="space-y-1.5">
-            {pendingSpoken && <FeedLine pending label="Gradium STT" text="transcribing your answer" />}
-            {PROFESSOR_IDS.map((id) => <FeedLine key={id} pending prof={id} label={`${PROFESSORS[id].name} agent`} text="assessing in parallel" />)}
-            <FeedLine pending label="Chair agent" text="waiting for the three verdicts" />
+        <div>
+          <p className="border-b border-ink pb-1 font-semibold">In progress</p>
+          <ul className="mt-1">
+            {pendingSpoken && <li className="border-b border-rule py-1.5">Gradium speech-to-text: transcribing</li>}
+            {PROFESSOR_IDS.map((id) => <li key={id} className="border-b border-rule py-1.5"><ProfName id={id} />: assessing</li>)}
+            <li className="py-1.5">Chair agent: waiting for three assessments</li>
           </ul>
         </div>
       )}
@@ -339,44 +333,48 @@ function AgentFeed({ history, phase, pendingSpoken, panel }: { history: Exchange
         const maxBluff = Math.max(...ex.assessments.map((a) => a.bluff_signal))
         return (
           <div key={n}>
-            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">After answer {n}</p>
-            <ul className="space-y-2">
-              {ex.spoken && <FeedLine label="Gradium STT" text={`transcribed your answer${ex.timings.stt_s ? ` in ${ex.timings.stt_s}s` : ''}`} />}
-              {ex.assessments.map((a) => (
-                <li key={a.professor} className="rounded-xl bg-paper p-2.5">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="flex items-center gap-2">
-                      <Avatar id={a.professor} size="sm" />
-                      <span className={`font-semibold ${PROFESSORS[a.professor].text}`}>{PROFESSORS[a.professor].name}</span>
-                    </span>
-                    <span className="font-semibold">{a.score_0_to_10}/10</span>
-                  </div>
-                  <Meter label="Bluff signal" value={a.bluff_signal} color={a.bluff_signal > 0.6 ? 'bg-skeptic' : 'bg-black/25'} />
-                  <Meter label="Wants the floor" value={a.urgency} color="bg-theorist/60" />
-                  {a.gaps[0] && <p className="mt-1.5 text-muted"><span className="font-medium text-ink">Gap: </span>{a.gaps[0]}</p>}
-                  <p className="mt-1 text-xs text-muted">Would ask: “{a.proposed_followup}”</p>
-                </li>
+            <p className="border-b border-ink pb-1 font-semibold">Answer {n}</p>
+            <table className="w-full text-left tabular-nums">
+              <thead className="text-muted">
+                <tr className="border-b border-rule">
+                  <th className="py-1.5 pr-2 font-medium">Examiner</th>
+                  <th className="py-1.5 pr-2 text-right font-medium">Score</th>
+                  <th className="py-1.5 pr-2 text-right font-medium">Bluff</th>
+                  <th className="py-1.5 text-right font-medium">Urgency</th>
+                </tr>
+              </thead>
+              <tbody>
+                {ex.assessments.map((a) => (
+                  <tr key={a.professor} className="border-b border-rule">
+                    <td className="py-1.5 pr-2"><ProfName id={a.professor} className="font-medium" /></td>
+                    <td className="py-1.5 pr-2 text-right">{a.score_0_to_10}/10</td>
+                    <td className={`py-1.5 pr-2 text-right ${a.bluff_signal > threshold ? 'font-semibold text-skeptic' : ''}`}>{a.bluff_signal.toFixed(2)}</td>
+                    <td className="py-1.5 text-right">{a.urgency.toFixed(2)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <dl className="mt-2 space-y-1.5">
+              {ex.assessments.filter((a) => a.gaps[0]).map((a) => (
+                <div key={a.professor}>
+                  <dt className="inline font-medium">{PROFESSORS[a.professor].name}, gap: </dt>
+                  <dd className="inline text-muted">{a.gaps[0]}</dd>
+                </div>
               ))}
-              <li className="rounded-xl border border-dashed border-black/15 p-2.5">
-                <p className="font-semibold">Chair agent → {PROFESSORS[ex.nextSpeaker].name}</p>
-                <p className="mt-0.5 text-muted">{ex.nextReasoning}</p>
-                {maxBluff > { gentle: 0.75, balanced: 0.6, tough: 0.45 }[panel.strictness.skeptic] && (
-                  <p className="mt-1 text-xs font-semibold text-skeptic">Rule: bluff signal {maxBluff.toFixed(2)} → the Skeptic may take the floor</p>
-                )}
-                <p className="mt-1 text-xs text-muted">
-                  Panel {ex.timings.professors_s}s · chair {ex.timings.chair_s}s · voice by Gradium TTS
-                </p>
-              </li>
-            </ul>
+            </dl>
+            <p className="mt-2 border-t border-rule pt-2">
+              <span className="font-medium">Chair: {PROFESSORS[ex.nextSpeaker].name} asks next.</span> <span className="text-muted">{ex.nextReasoning}</span>
+            </p>
+            {maxBluff > threshold && (
+              <p className="mt-1 text-skeptic">Bluff {maxBluff.toFixed(2)} &gt; threshold {threshold.toFixed(2)}: Prof. Skeptic may ask next.</p>
+            )}
+            <p className="mt-1 text-xs text-muted tabular-nums">
+              {ex.timings.stt_s ? `Speech-to-text ${ex.timings.stt_s}s · ` : ''}examiners {ex.timings.professors_s}s · chair {ex.timings.chair_s}s
+            </p>
           </div>
         )
       })}
-      {history.length === 0 && phase !== 'conferring' && (
-        <p className="text-muted">
-          Answer the first question and you'll see each AI agent's verdict here: scores, bluff signal, the gaps they spotted, and why the chair
-          picked the next professor.
-        </p>
-      )}
+      {history.length === 0 && phase !== 'conferring' && <p className="text-muted">Each examiner's score and reasoning appears here after your first answer.</p>}
     </div>
   )
 }
@@ -385,57 +383,28 @@ function Transcript({ history, current }: { history: Exchange[]; current: Turn }
   return (
     <div className="space-y-3 text-sm">
       {history.map((ex, i) => (
-        <div key={i} className="space-y-2">
-          <Bubble prof={ex.turn.speaker} text={ex.turn.question} />
-          <p className="ml-8 rounded-2xl rounded-tr-sm bg-ink/90 px-3 py-2 text-white">
-            <span className="mb-0.5 block text-xs text-white/60">You{ex.spoken ? ' (transcribed)' : ''}</span>
-            {ex.answer}
-          </p>
+        <div key={i} className="space-y-2 border-b border-rule pb-3">
+          <Line who={<ProfName id={ex.turn.speaker} />} text={ex.turn.question} />
+          <Line who={<span className="font-semibold">You{ex.spoken ? ' (transcribed)' : ''}</span>} text={ex.answer} />
         </div>
       ))}
-      <Bubble prof={current.speaker} text={current.question} />
+      <Line who={<ProfName id={current.speaker} />} text={current.question} />
     </div>
   )
 }
 
-function Bubble({ prof, text }: { prof: ProfessorId; text: string }) {
-  const p = PROFESSORS[prof]
+function Line({ who, text }: { who: ReactNode; text: string }) {
   return (
-    <div className="flex gap-2">
-      <Avatar id={prof} size="sm" />
-      <p className={`rounded-2xl rounded-tl-sm px-3 py-2 ${p.soft}`}>
-        <span className={`mb-0.5 block text-xs font-semibold ${p.text}`}>{p.name}</span>
-        {text}
-      </p>
-    </div>
-  )
-}
-
-function FeedLine({ label, text, pending = false, prof }: { label: string; text: string; pending?: boolean; prof?: ProfessorId }) {
-  return (
-    <li className="flex items-center gap-2">
-      {prof ? <Avatar id={prof} size="sm" /> : <span aria-hidden className="grid h-8 w-8 place-items-center rounded-full bg-black/5 text-xs">{pending ? '…' : '✓'}</span>}
-      <span><span className="font-semibold">{label}</span> <span className="text-muted">{text}</span></span>
-      {pending && <span className="ml-auto text-muted"><ThinkingDots /></span>}
-    </li>
-  )
-}
-
-function Meter({ label, value, color }: { label: string; value: number; color: string }) {
-  return (
-    <div className="mt-1.5">
-      <div className="flex justify-between text-xs text-muted"><span>{label}</span><span>{value.toFixed(2)}</span></div>
-      <div className="mt-0.5 h-1.5 overflow-hidden rounded-full bg-black/5">
-        <div className={`h-full rounded-full ${color}`} style={{ width: `${Math.round(value * 100)}%` }} />
-      </div>
-    </div>
+    <p className="pl-4 -indent-4">
+      {who}: {text}
+    </p>
   )
 }
 
 function MicIcon() {
   return (
-    <svg aria-hidden width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="9" y="2" width="6" height="12" rx="3" />
+    <svg aria-hidden width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="square">
+      <rect x="9" y="2" width="6" height="12" />
       <path d="M5 10v1a7 7 0 0 0 14 0v-1M12 18v4M8 22h8" />
     </svg>
   )

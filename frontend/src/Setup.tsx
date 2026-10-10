@@ -1,30 +1,25 @@
 import { useEffect, useRef, useState } from 'react'
 import { createSession, type Language, type PanelConfig, type ProfessorId, type SessionResponse, type Strictness } from './api'
 import { WavRecorder } from './recorder'
-import { AgentBadge, Avatar, PROFESSOR_IDS, PROFESSORS, STRICTNESS, TopBar, TUNING_COPY } from './professors'
+import { Button, Footer, PROFESSOR_IDS, PROFESSORS, ProfName, SectionHeading, Segmented, STRICTNESS, TopBar, TUNING_COPY } from './professors'
 
 const LENGTHS = [
-  { n: 4, label: 'Quick', hint: '~5 min' },
-  { n: 6, label: 'Standard', hint: '~8 min' },
-  { n: 8, label: 'Full', hint: '~12 min' },
+  { n: 4, label: '4 questions' },
+  { n: 6, label: '6 questions' },
+  { n: 8, label: '8 questions' },
 ]
 
-const LOADING_STEPS = [
-  'Blueprint agent is reading your slides…',
-  'Finding the examinable topics…',
-  'Writing what a strong answer must include…',
-  'The professor agents are taking their seats…',
+const LOADING_STEPS = ['Reading slides', 'Finding examinable topics', 'Writing the exam blueprint', 'Preparing the first question']
+
+const SESSION_STEPS = [
+  { title: 'Blueprint agent', body: 'reads your slides and lists the examinable topics, key concepts, what a strong answer includes and common misconceptions.' },
+  { title: 'Three examiners score each answer', body: 'Prof. Theorist, Prof. Practitioner and Prof. Skeptic each give a score out of 10, note gaps and estimate a bluff signal.' },
+  { title: 'Chair agent', body: 'chooses who asks next and what. Prof. Skeptic follows up when the bluff signal is high; no examiner asks three questions in a row.' },
+  { title: 'Deliberation', body: 'the panel discusses your answers and agrees a grade on the Swiss 1–6 scale, with a review of every answer.' },
+  { title: 'Revision plan', body: 'study sessions up to your exam date, flashcards for weak topics and a calendar file.' },
 ]
 
-const AGENT_STEPS = [
-  { title: 'Blueprint agent', body: 'Reads your PDF and maps every examinable topic, the key concepts, what a strong answer includes and the classic misconceptions.' },
-  { title: '3 professor agents, in parallel', body: 'After every answer, Theorist, Practitioner and Skeptic each score it, spot the gaps and estimate how much you were bluffing.' },
-  { title: 'Chair agent', body: 'Reads all three verdicts and decides who asks next and what. The Skeptic takes the floor when you bluff; nobody speaks three times in a row.' },
-  { title: 'Deliberation agent', body: 'The panel debates your performance and agrees on a grade on the Swiss 1–6 scale, with an answer-by-answer analysis.' },
-  { title: 'Coach agent', body: 'Turns the weak spots into a revision plan up to your exam date, flashcards and a calendar file.' },
-]
-
-const FOCUS_EXAMPLES = ['Focus on regularisation, I’m weak there', 'Ask me for derivations', 'Treat me like it’s the real exam']
+const cap = (s: string) => s[0].toUpperCase() + s.slice(1)
 
 function daysUntil(iso: string): number | null {
   if (!iso) return null
@@ -85,15 +80,17 @@ export default function Setup({ onReady }: { onReady: (s: SessionResponse) => vo
     return (
       <>
         <TopBar />
-        <div className="mx-auto flex min-h-[75vh] max-w-lg flex-col items-center justify-center px-4 text-center" role="status" aria-live="polite">
-          <div className="mb-8 flex -space-x-3">
-            {PROFESSOR_IDS.map((id) => <Avatar key={id} id={id} size="lg" />)}
-          </div>
-          <p className="font-display text-2xl font-semibold">{LOADING_STEPS[step]}</p>
-          <p className="mt-3 text-muted">About 15 seconds. Take a breath. This is practice, so mistakes here are how you get better.</p>
-          <div className="mt-6 h-1.5 w-64 overflow-hidden rounded-full bg-black/5">
-            <div className="h-full rounded-full bg-theorist transition-all duration-1000" style={{ width: `${((step + 1) / LOADING_STEPS.length) * 100}%` }} />
-          </div>
+        <div className="mx-auto max-w-xl px-4 py-24" role="status" aria-live="polite">
+          <p className="font-serif text-3xl">Preparing your exam</p>
+          <p className="mt-2 text-muted">About 15 seconds.</p>
+          <ol className="mt-8 border-t border-ink">
+            {LOADING_STEPS.map((s, i) => (
+              <li key={s} className={`flex justify-between border-b border-rule py-2 ${i > step ? 'text-muted' : ''}`}>
+                <span>{s}</span>
+                <span className="tabular-nums">{i < step ? 'Done' : i === step ? 'In progress' : ''}</span>
+              </li>
+            ))}
+          </ol>
         </div>
       </>
     )
@@ -101,204 +98,140 @@ export default function Setup({ onReady }: { onReady: (s: SessionResponse) => vo
 
   return (
     <>
-      <TopBar />
-      <div className="mx-auto grid max-w-7xl gap-10 px-4 pb-20 pt-8 sm:px-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)] lg:gap-12 lg:pt-14">
-        {/* ---------- Left: pitch + agents ---------- */}
+      <TopBar
+        right={
+          <a href="#settings" className="text-sm font-medium underline underline-offset-4 lg:hidden">
+            Go to settings
+          </a>
+        }
+      />
+      <div className="mx-auto grid max-w-7xl gap-12 px-4 pb-16 pt-10 sm:px-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] lg:pt-14">
+        {/* ---------- Left: what this is ---------- */}
         <div>
-          <p className="inline-block rounded-full bg-theorist-soft px-3 py-1 text-sm font-semibold text-theorist">Mock oral exam prep</p>
-          <h1 className="mt-4 font-display text-4xl font-bold leading-tight tracking-tight sm:text-5xl">
-            Sit your oral exam before the real one.
-          </h1>
-          <p className="mt-4 max-w-xl text-lg text-muted">
-            Upload your lecture slides and answer out loud to a panel of three AI professor agents. They question you, push back when you
-            bluff, grade you on the Swiss scale and tell you exactly what to improve before exam day.
+          <h1 className="font-serif text-4xl leading-tight sm:text-5xl">Mock oral exams from your own lecture slides.</h1>
+          <p className="mt-5 max-w-xl text-lg text-muted">
+            Upload one lecture's slides. Three AI examiners question you out loud, follow up on vague answers and grade you on the Swiss 1–6
+            scale. You get a written record and a revision plan.
           </p>
-          <a href="#setup" className="mt-6 inline-block rounded-2xl bg-ink px-5 py-3 font-semibold text-white lg:hidden">Set up my mock exam ↓</a>
 
-          <h2 className="mt-10 text-sm font-semibold uppercase tracking-wide text-muted">Your examining panel</h2>
-          <div className="mt-3 grid gap-3 sm:grid-cols-3 lg:grid-cols-1 xl:grid-cols-3">
-            {PROFESSOR_IDS.map((id) => (
-              <div key={id} className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-black/5">
-                <div className="flex items-center gap-3">
-                  <Avatar id={id} />
-                  <div>
-                    <p className={`font-semibold ${PROFESSORS[id].text}`}>{PROFESSORS[id].name}</p>
-                    <AgentBadge />
-                  </div>
-                </div>
-                <p className="mt-3 text-sm text-muted">{PROFESSORS[id].tagline}. {PROFESSORS[id].style}.</p>
-              </div>
-            ))}
+          <div className="mt-12">
+            <SectionHeading>The panel (three AI agents)</SectionHeading>
+            <table className="w-full text-left text-sm">
+              <thead>
+                <tr className="border-b border-ink">
+                  <th className="py-2 pr-3 font-semibold">Examiner</th>
+                  <th className="py-2 pr-3 font-semibold">Asks about</th>
+                  <th className="py-2 pr-3 font-semibold">Manner</th>
+                  <th className="py-2 font-semibold">Strictness</th>
+                </tr>
+              </thead>
+              <tbody>
+                {PROFESSOR_IDS.map((id) => (
+                  <tr key={id} className="border-b border-rule align-top">
+                    <td className="py-2.5 pr-3"><ProfName id={id} /></td>
+                    <td className="py-2.5 pr-3">{PROFESSORS[id].asks}</td>
+                    <td className="py-2.5 pr-3">{PROFESSORS[id].manner}</td>
+                    <td className="py-2.5">{cap(panel.strictness[id])}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
 
-          <h2 className="mt-10 text-sm font-semibold uppercase tracking-wide text-muted">How the agents work</h2>
-          <ol className="mt-3 space-y-0">
-            {AGENT_STEPS.map((s, i) => (
-              <li key={s.title} className="flex gap-4">
-                <div className="flex flex-col items-center">
-                  <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-ink text-sm font-semibold text-white">{i + 1}</span>
-                  {i < AGENT_STEPS.length - 1 && <span aria-hidden className="w-px flex-1 bg-black/10" />}
-                </div>
-                <div className="pb-5">
-                  <p className="font-semibold">{s.title}</p>
-                  <p className="text-sm text-muted">{s.body}</p>
-                </div>
-              </li>
-            ))}
-          </ol>
-          <p className="text-sm text-muted">
-            Every agent reasons with <span className="font-semibold text-ink">Google Gemini</span>; you hear each professor in their own{' '}
-            <span className="font-semibold text-ink">Gradium</span> voice, and Gradium transcribes your spoken answers.
-          </p>
+          <div className="mt-12">
+            <SectionHeading>How a session runs</SectionHeading>
+            <ol className="space-y-3">
+              {SESSION_STEPS.map((s, i) => (
+                <li key={s.title} className="grid grid-cols-[1.75rem_1fr] text-sm">
+                  <span className="tabular-nums text-muted">{i + 1}.</span>
+                  <span><span className="font-semibold">{s.title}</span> {s.body}</span>
+                </li>
+              ))}
+            </ol>
+          </div>
         </div>
 
-        {/* ---------- Right: setup form ---------- */}
-        <div id="setup" className="scroll-mt-20 lg:sticky lg:top-24 lg:self-start">
-          <div className="space-y-6 rounded-3xl bg-white p-6 shadow-sm ring-1 ring-black/5 sm:p-8">
-            <h2 className="font-display text-2xl font-semibold">Set up your mock exam</h2>
+        {/* ---------- Right: settings ---------- */}
+        <div id="settings" className="lg:sticky lg:top-6 lg:self-start">
+          <div className="border border-ink p-5 sm:p-7">
+            <h2 className="font-serif text-2xl">Exam settings</h2>
 
-            <div>
-              <h3 className="mb-2 font-semibold">Lecture slides</h3>
-              <button
-                type="button"
-                onClick={() => inputRef.current?.click()}
+            <div className="mt-6">
+              <p className="mb-1.5 font-semibold">Lecture slides (PDF)</p>
+              <div
                 onDragOver={(e) => { e.preventDefault(); setDragging(true) }}
                 onDragLeave={() => setDragging(false)}
                 onDrop={(e) => { e.preventDefault(); setDragging(false); pick(e.dataTransfer.files[0]) }}
-                className={`flex w-full flex-col items-center justify-center rounded-2xl border-2 border-dashed px-4 py-7 text-center transition ${
-                  dragging ? 'border-theorist bg-theorist-soft' : file ? 'border-practitioner bg-practitioner-soft' : 'border-black/15 hover:border-theorist hover:bg-theorist-soft/50'
-                }`}
+                className={`flex flex-wrap items-center justify-between gap-3 border border-dashed px-4 py-4 ${dragging ? 'border-ink bg-black/[0.04]' : 'border-muted'}`}
               >
-                {file ? (
-                  <>
-                    <span className="font-semibold text-practitioner">✓ {file.name}</span>
-                    <span className="mt-1 text-sm text-muted">{(file.size / 1024 / 1024).toFixed(1)} MB · click to change</span>
-                  </>
-                ) : (
-                  <>
-                    <span className="font-semibold">Drop your PDF here, or click to browse</span>
-                    <span className="mt-1 text-sm text-muted">The panel only asks about what's in your slides</span>
-                  </>
-                )}
-              </button>
+                <span className={file ? '' : 'text-muted'}>{file ? `${file.name} (${(file.size / 1024 / 1024).toFixed(1)} MB)` : 'Drop a PDF here, or choose a file.'}</span>
+                <Button variant="secondary" onClick={() => inputRef.current?.click()}>{file ? 'Change file' : 'Choose file'}</Button>
+              </div>
               <input ref={inputRef} type="file" accept="application/pdf,.pdf" className="sr-only" onChange={(e) => pick(e.target.files?.[0])} />
             </div>
 
-            <div className="grid gap-5 sm:grid-cols-2">
+            <div className="mt-5 grid gap-5 sm:grid-cols-2">
               <div>
-                <label htmlFor="exam-date" className="mb-2 block font-semibold">Real exam date</label>
-                <input id="exam-date" type="date" min={today} value={examDate} onChange={(e) => setExamDate(e.target.value)} className="w-full rounded-xl border border-black/15 px-3 py-2.5" />
-                <p className="mt-1.5 text-sm text-muted">
-                  {days === null ? 'Optional, used to plan your revision.' : days <= 0 ? "That's today. Good luck!" : `${days} day${days === 1 ? '' : 's'} to go.`}
+                <label htmlFor="exam-date" className="mb-1.5 block font-semibold">Date of the real exam</label>
+                <input id="exam-date" type="date" min={today} value={examDate} onChange={(e) => setExamDate(e.target.value)} className="w-full border border-ink px-3 py-2" />
+                <p className="mt-1 text-sm text-muted">
+                  {days === null ? 'Optional. Used for the revision plan.' : days <= 0 ? 'Exam is today.' : `${days} day${days === 1 ? '' : 's'} from today.`}
                 </p>
               </div>
               <fieldset>
-                <legend className="mb-2 font-semibold">Exam language</legend>
-                <Segmented
-                  name="lang"
-                  value={language}
-                  options={[{ value: 'en', label: 'English' }, { value: 'de', label: 'Deutsch' }]}
-                  onChange={(v) => setLanguage(v as Language)}
-                />
+                <legend className="mb-1.5 font-semibold">Language</legend>
+                <Segmented name="lang" value={language} options={[{ value: 'en', label: 'English' }, { value: 'de', label: 'Deutsch' }]} onChange={(v) => setLanguage(v as Language)} />
               </fieldset>
             </div>
 
-            <fieldset>
-              <legend className="mb-2 font-semibold">Length</legend>
-              <div className="grid grid-cols-3 gap-2">
-                {LENGTHS.map((o) => (
-                  <label key={o.n} className={`cursor-pointer rounded-xl border px-3 py-2.5 text-center transition has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-theorist ${length === o.n ? 'border-theorist bg-theorist-soft' : 'border-black/15 hover:bg-black/[0.02]'}`}>
-                    <input type="radio" name="length" value={o.n} checked={length === o.n} onChange={() => setLength(o.n)} className="sr-only" />
-                    <span className={`block font-semibold ${length === o.n ? 'text-theorist' : ''}`}>{o.label}</span>
-                    <span className="block text-xs text-muted">{o.n} questions · {o.hint}</span>
-                  </label>
-                ))}
-              </div>
+            <fieldset className="mt-5">
+              <legend className="mb-1.5 font-semibold">Length</legend>
+              <Segmented name="length" value={String(length)} options={LENGTHS.map((o) => ({ value: String(o.n), label: o.label }))} onChange={(v) => setLength(Number(v))} />
             </fieldset>
 
-            {/* Agent tuning */}
-            <div className="rounded-2xl bg-paper p-4 ring-1 ring-black/5 sm:p-5">
-              <h3 className="font-semibold">Tune your panel</h3>
-              <p className="text-sm text-muted">Each professor is a separate AI agent. Set how hard each one pushes you.</p>
-              <div className="mt-4 space-y-4">
+            <fieldset className="mt-6">
+              <legend className="font-semibold">Strictness</legend>
+              <p className="text-sm text-muted">Each examiner is a separate AI agent.</p>
+              <div className="mt-2 border-t border-ink">
                 {PROFESSOR_IDS.map((id) => (
-                  <div key={id}>
+                  <div key={id} className="border-b border-rule py-3">
                     <div className="flex flex-wrap items-center justify-between gap-2">
-                      <span className="flex items-center gap-2">
-                        <Avatar id={id} size="sm" />
-                        <span className={`font-semibold ${PROFESSORS[id].text}`}>{PROFESSORS[id].name}</span>
-                      </span>
-                      <Segmented
-                        small
-                        name={`tune-${id}`}
-                        value={panel.strictness[id]}
-                        options={STRICTNESS.map((s) => ({ value: s, label: s[0].toUpperCase() + s.slice(1) }))}
-                        onChange={(v) => tune(id, v as Strictness)}
-                      />
+                      <ProfName id={id} />
+                      <div className="w-full sm:w-72">
+                        <Segmented size="sm" name={`tune-${id}`} value={panel.strictness[id]} options={STRICTNESS.map((s) => ({ value: s, label: cap(s) }))} onChange={(v) => tune(id, v as Strictness)} />
+                      </div>
                     </div>
                     <p className="mt-1 text-sm text-muted">{TUNING_COPY[id][panel.strictness[id]]}</p>
                   </div>
                 ))}
               </div>
-              <label htmlFor="focus" className="mt-5 block font-semibold">Tell the panel <span className="font-normal text-muted">(optional)</span></label>
+            </fieldset>
+
+            <div className="mt-5">
+              <label htmlFor="focus" className="block font-semibold">Notes for the panel <span className="font-normal text-muted">(optional)</span></label>
               <textarea
                 id="focus"
                 rows={2}
                 maxLength={400}
                 value={panel.focus}
                 onChange={(e) => setPanel((p) => ({ ...p, focus: e.target.value }))}
-                placeholder="e.g. Focus on regularisation, I'm weak there"
-                className="mt-1.5 w-full rounded-xl border border-black/15 bg-white px-3 py-2"
+                placeholder="For example: focus on regularisation."
+                className="mt-1.5 w-full border border-ink px-3 py-2"
               />
-              <div className="mt-1.5 flex flex-wrap gap-1.5">
-                {FOCUS_EXAMPLES.map((ex) => (
-                  <button key={ex} type="button" onClick={() => setPanel((p) => ({ ...p, focus: ex }))} className="rounded-full bg-white px-2.5 py-1 text-xs font-medium text-muted ring-1 ring-black/10 hover:text-ink">
-                    {ex}
-                  </button>
-                ))}
-              </div>
             </div>
 
             <MicCheck />
 
-            {error && <p role="alert" className="rounded-xl bg-skeptic-soft px-4 py-3 text-skeptic">{error}</p>}
+            {error && <p role="alert" className="mt-5 border border-skeptic px-4 py-3 text-skeptic">{error}</p>}
 
-            <button
-              type="button"
-              disabled={!file}
-              onClick={start}
-              className="w-full rounded-2xl bg-ink px-6 py-4 text-lg font-semibold text-white shadow-sm transition hover:bg-black disabled:cursor-not-allowed disabled:opacity-30"
-            >
-              {file ? 'Start my mock exam' : 'Add your slides to begin'}
-            </button>
+            <Button className="mt-6 w-full py-3.5 text-lg" disabled={!file} onClick={start}>
+              {file ? 'Start exam' : 'Upload slides to start'}
+            </Button>
           </div>
         </div>
       </div>
+      <Footer />
     </>
-  )
-}
-
-function Segmented({ name, value, options, onChange, small = false }: {
-  name: string
-  value: string
-  options: { value: string; label: string }[]
-  onChange: (v: string) => void
-  small?: boolean
-}) {
-  return (
-    <div className="inline-flex w-full rounded-xl bg-black/5 p-1 sm:w-auto" role="radiogroup">
-      {options.map((o) => (
-        <label
-          key={o.value}
-          className={`flex-1 cursor-pointer rounded-lg text-center font-medium transition has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-theorist ${small ? 'px-2.5 py-1 text-sm' : 'px-3 py-2'} ${
-            value === o.value ? 'bg-white text-ink shadow-sm' : 'text-muted hover:text-ink'
-          }`}
-        >
-          <input type="radio" name={name} value={o.value} checked={value === o.value} onChange={() => onChange(o.value)} className="sr-only" />
-          {o.label}
-        </label>
-      ))}
-    </div>
   )
 }
 
@@ -330,21 +263,19 @@ function MicCheck() {
   }
 
   return (
-    <div>
-      <h3 className="mb-2 font-semibold">Mic check <span className="font-normal text-muted">(optional, you can also type)</span></h3>
+    <div className="mt-5">
+      <p className="mb-1.5 font-semibold">Microphone <span className="font-normal text-muted">(optional; you can type answers)</span></p>
       <div className="flex flex-wrap items-center gap-3">
-        <button type="button" onClick={test} disabled={state === 'testing'} className="rounded-xl border border-black/15 px-4 py-2.5 font-medium hover:bg-black/[0.03] disabled:opacity-60">
-          {state === 'testing' ? 'Say something…' : 'Test my microphone'}
-        </button>
+        <Button variant="secondary" onClick={test} disabled={state === 'testing'}>{state === 'testing' ? 'Speak now' : 'Test microphone'}</Button>
         {state === 'testing' && (
-          <div className="h-3 w-40 overflow-hidden rounded-full bg-black/5" aria-label="Microphone level">
-            <div className="h-full rounded-full bg-practitioner transition-[width] duration-75" style={{ width: `${level * 100}%` }} />
+          <div className="h-2 w-40 border border-ink" aria-label="Microphone level">
+            <div className="h-full bg-ink" style={{ width: `${level * 100}%` }} />
           </div>
         )}
         <span aria-live="polite" className="text-sm">
-          {state === 'testing' && heard && <span className="text-practitioner">✓ We can hear you</span>}
-          {state === 'ok' && (heard ? <span className="text-practitioner">✓ Your mic works</span> : <span className="text-skeptic">We didn't hear much. Check your input device, or type your answers.</span>)}
-          {state === 'denied' && <span className="text-skeptic">Microphone blocked. Allow it in your browser, or type your answers instead.</span>}
+          {state === 'testing' && heard && 'Input detected.'}
+          {state === 'ok' && (heard ? 'Microphone works.' : <span className="text-skeptic">No input detected. Check the input device, or type your answers.</span>)}
+          {state === 'denied' && <span className="text-skeptic">Microphone access is blocked. Allow it in the browser, or type your answers.</span>}
         </span>
       </div>
     </div>

@@ -45,28 +45,28 @@ async def main() -> None:
         await page.get_by_text("Tough").nth(2).click()  # Skeptic: tough
         await page.fill("#focus", "Focus on gradient descent, I'm weak there")
         await page.screenshot(path=out / "2_setup_filled.png", full_page=True)
-        await page.get_by_role("button", name="Start my mock exam").click()
-        await page.wait_for_selector("text=asks", timeout=90_000)
+        await page.get_by_role("button", name="Start exam").click()
+        await page.wait_for_selector("text=Replay question", timeout=90_000)
         await page.screenshot(path=out / "3_exam_first_question.png", full_page=True)
 
         for i, answer in enumerate(ANSWERS):
-            if await page.get_by_role("button", name="See my grade and analysis →").count():
+            if await page.get_by_role("button", name="View results").count():
                 break
-            if await page.get_by_role("button", name="⌨ Type instead").count():
-                await page.get_by_role("button", name="⌨ Type instead").click()
+            if await page.get_by_role("button", name="Type answer").count():
+                await page.get_by_role("button", name="Type answer").click()
             await page.fill("#typed", answer)
-            await page.get_by_role("button", name="Send answer").click()
-            await page.wait_for_selector("text=The panel is conferring", timeout=10_000)
+            await page.get_by_role("button", name="Submit answer").click()
+            await page.wait_for_selector("text=The panel is assessing your answer.", timeout=10_000)
             if i == 0:
                 await page.screenshot(path=out / "4_exam_conferring.png", full_page=True)
-            await page.wait_for_selector("text=The panel is conferring", state="detached", timeout=120_000)
+            await page.wait_for_selector("text=The panel is assessing your answer.", state="detached", timeout=120_000)
             await page.screenshot(path=out / f"5_exam_after_answer_{i + 1}.png", full_page=True)
 
         await page.get_by_role("tab", name="Transcript").click()
         await page.screenshot(path=out / "6_exam_transcript_tab.png", full_page=True)
-        await page.get_by_role("button", name="See my grade and analysis →").click()
-        await page.wait_for_selector("text=Your mock exam analysis", timeout=120_000)
-        await page.get_by_text("Show a stronger answer").first.click()
+        await page.get_by_role("button", name="View results").click()
+        await page.wait_for_selector("text=Examination record", timeout=120_000)
+        await page.get_by_text("Show model answer").first.click()
         await page.screenshot(path=out / "7_report.png", full_page=True)
 
         await page.set_viewport_size({"width": 390, "height": 844})

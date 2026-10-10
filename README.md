@@ -139,7 +139,7 @@ samples/intro_ml_lecture.pdf
 
 - **AI and voice:** Google Gemini via `google-genai`; Gradium STT and TTS REST APIs
 - **Backend:** Python 3.11, FastAPI, Uvicorn, Pydantic v2, httpx, pypdf, python-dotenv, python-multipart, uv
-- **Frontend:** React 19, TypeScript, Vite, Tailwind CSS v4, Web Audio API (WAV capture), Google Fonts (Fraunces, Plus Jakarta Sans)
+- **Frontend:** React 19, TypeScript, Vite, Tailwind CSS v4, Web Audio API (WAV capture), Google Fonts (Archivo, STIX Two Text)
 - **Dev workflow:** Claude Code, Entire CLI, Git and GitHub; ReportLab to generate the sample lecture; Playwright for headless UI walkthroughs
 
 ## Limitations and next steps
