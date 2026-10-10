@@ -6,7 +6,8 @@ from dataclasses import dataclass, field
 from datetime import date
 
 from agents import chair, professors
-from schemas import Blueprint, ChairDecision, Language, ProfessorAssessment, RevisionPlan, Topic, Turn
+from schemas import (Blueprint, ChairDecision, Language, PanelConfig, ProfessorAssessment, RevisionPlan,
+                     Topic, Turn)
 
 
 @dataclass
@@ -16,6 +17,7 @@ class ExamSession:
     language: Language = "en"
     num_questions: int = 6
     exam_date: date | None = None
+    panel: PanelConfig = field(default_factory=PanelConfig)
     id: str = field(default_factory=lambda: uuid.uuid4().hex[:12])
     turns: list[Turn] = field(default_factory=list)
     report: dict | None = None

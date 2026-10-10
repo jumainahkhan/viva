@@ -9,6 +9,11 @@ ROOT = Path(__file__).resolve().parent.parent
 load_dotenv(ROOT / ".env")
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
+# Optional: use Google Cloud credits through Vertex AI instead of an AI Studio key.
+# Requires `gcloud auth application-default login` and a project with the Vertex AI API enabled.
+GOOGLE_CLOUD_PROJECT = os.getenv("GOOGLE_CLOUD_PROJECT", "")
+GOOGLE_CLOUD_LOCATION = os.getenv("GOOGLE_CLOUD_LOCATION", "global")
+USE_VERTEX = os.getenv("GEMINI_USE_VERTEX", "").lower() in ("1", "true", "yes") and bool(GOOGLE_CLOUD_PROJECT)
 GRADIUM_API_KEY = os.getenv("GRADIUM_API_KEY", "")
 
 GEMINI_MODEL_FAST = os.getenv("GEMINI_MODEL_FAST") or "gemini-3.8-flash"

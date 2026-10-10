@@ -1,6 +1,6 @@
 # Viva 🎓
 
-**Rehearse your oral exam out loud, against a panel of three AI professors who have read your lecture slides.**
+**Mock oral exam prep: sit your oral exam out loud before the real one, in front of a panel of three AI professor agents who have read your lecture slides.**
 
 Oral exams decide grades at many Swiss and European universities, yet students usually prepare alone with written notes. Nobody asks them follow-up questions out loud, notices when they talk around a gap, or tells them which topics are weak before the real exam. Viva fixes that. Upload your slides, pick your exam date, and answer questions by voice. Three professor agents judge every answer in parallel, a chair agent decides who pushes next, and each professor speaks in their own voice. At the end the panel deliberates, agrees on a grade on the Swiss 1–6 scale, and hands you a revision plan, flashcards and a calendar file running up to your exam.
 
@@ -42,7 +42,10 @@ flowchart LR
    - the topic moves on when two or more professors vote to, or after two questions on it;
    - the exam ends after the chosen number of questions.
 4. **Voice.** The browser records 16-bit mono WAV, Gradium transcribes it, and the next question is streamed back from Gradium TTS in the speaker's own voice.
-5. **Deliberation and report.** The panel argues briefly, in character, and settles on a grade (Swiss 1–6, 0.25 steps, 4 = pass, rounded and clamped in code). The report leads with strengths, then gives per-topic feedback, a dated revision plan up to the exam, flashcards for weak topics, and an RFC 5545 `.ics` calendar file.
+5. **Tune the panel.** Before the exam the student sets each professor agent to *Gentle*, *Balanced* or *Tough*, which changes its prompt and scoring bar. The Skeptic's setting moves the bluff threshold at which the chair hands it the floor (0.75 / 0.6 / 0.45). A free-text "Tell the panel" note ("Focus on regularisation, I'm weak there") is passed to every agent.
+6. **Deliberation and analysis.** The panel argues briefly, in character, and settles on a grade (Swiss 1–6, 0.25 steps, 4 = pass, rounded and clamped in code). The report gives an overall analysis, what went well and a ranked list of what to improve, then an **answer-by-answer review**: the full transcript, each professor's score and bluff flag, what to improve, and a stronger model answer. It also includes per-topic scores, a dated revision plan up to the exam, flashcards for weak topics, an RFC 5545 `.ics` calendar file, and a downloadable transcript.
+
+The exam screen makes the agents visible: a live **Agent activity** panel shows each professor agent's score, bluff signal, the gap it spotted and the question it wanted to ask, plus why the chair picked the next speaker.
 
 ## Partner technologies
 
@@ -80,6 +83,19 @@ Open **http://localhost:8077**. A sample lecture is in `samples/intro_ml_lecture
 
 **Frontend development with hot reload:** keep the backend running, then `cd frontend && npm run dev` and open http://localhost:5173 (it proxies `/api` to port 8077).
 
+**Automated mock students (testing without a human):**
+
+```bash
+cd backend
+# A Gemini-driven student (strong | bluffer | weak) takes the whole exam through the API.
+# By default its answers are spoken with Gradium TTS and uploaded as WAV, exercising STT end to end.
+uv run python scripts/simulate_student.py --profile bluffer
+uv run python scripts/simulate_student.py --profile strong --de --text --panel '{"strictness":{"skeptic":"tough"}}'
+
+# Drive the real web UI in headless Chromium and screenshot every screen
+uv run --with playwright python scripts/ui_walkthrough.py --chromium /path/to/chromium
+```
+
 **Backup demo without audio or browser:**
 
 ```bash
@@ -93,9 +109,9 @@ uv run python scripts/gradium_smoke_test.py   # checks every voice + STT round t
 | Method and path | Request | Response |
 | --- | --- | --- |
 | `GET /api/health` | none | Status, configured keys, model names |
-| `POST /api/session` | multipart: `pdf`, `exam_date` (YYYY-MM-DD, optional), `num_questions` (2–10), `language` (`en` or `de`) | `session_id`, blueprint, professors, first `turn` |
+| `POST /api/session` | multipart: `pdf`, `exam_date` (YYYY-MM-DD, optional), `num_questions` (2–10), `language` (`en` or `de`), `panel` (optional JSON: `{"strictness": {"theorist": "gentle" \| "balanced" \| "tough", ...}, "focus": "..."}`) | `session_id`, blueprint, panel, first `turn` |
 | `POST /api/session/{id}/answer` | multipart: `audio` (WAV) **or** `text`, or `skip=true` | `transcript`, three `assessments`, next `turn`, `timings` |
-| `POST /api/session/{id}/report` | none | `report` (deliberation, grade, strengths, per-topic feedback, weakest topics), `plan` (sessions, flashcards), `ics_url` |
+| `POST /api/session/{id}/report` | none | `report` (deliberation, grade, summary, strengths, improvements, answer reviews with stronger answers, per-topic feedback, weakest topics), `plan` (sessions, flashcards), `transcript` with every professor's assessment, `ics_url` |
 | `GET /api/session/{id}/calendar.ics` | none | `text/calendar` revision plan, `Europe/Zurich`, sessions at 18:00 |
 | `GET /api/audio/{audio_id}.wav` | none | The question audio, streamed from Gradium on first request and cached for replay |
 
@@ -112,7 +128,8 @@ backend/
   gradium_client.py    STT, TTS (buffered and streaming), voice list
   exam.py              in-memory ExamSession and turn orchestration
   agents/              blueprint, professors, chair, deliberation, revision (+ .ics)
-  scripts/             gradium_smoke_test, cli_exam, test_blueprint, make_sample_pdf
+  scripts/             simulate_student (mock student agent), ui_walkthrough, gradium_smoke_test,
+                       cli_exam, test_blueprint, make_sample_pdf
 frontend/src/
   Setup.tsx, Exam.tsx, Report.tsx, recorder.ts (WAV capture), api.ts
 samples/intro_ml_lecture.pdf
@@ -123,13 +140,13 @@ samples/intro_ml_lecture.pdf
 - **AI and voice:** Google Gemini via `google-genai`; Gradium STT and TTS REST APIs
 - **Backend:** Python 3.11, FastAPI, Uvicorn, Pydantic v2, httpx, pypdf, python-dotenv, python-multipart, uv
 - **Frontend:** React 19, TypeScript, Vite, Tailwind CSS v4, Web Audio API (WAV capture), Google Fonts (Fraunces, Plus Jakarta Sans)
-- **Dev workflow:** Claude Code, Entire CLI, Git and GitHub; ReportLab to generate the sample lecture
+- **Dev workflow:** Claude Code, Entire CLI, Git and GitHub; ReportLab to generate the sample lecture; Playwright for headless UI walkthroughs
 
 ## Limitations and next steps
 
 - **Push-to-talk, not streaming.** Gradium STT over REST runs at roughly half real time, so a 20-second answer takes about 10 seconds to transcribe. Next step: stream microphone audio to Gradium's WebSocket STT while the student speaks, so the transcript is ready the moment they stop.
 - **In-memory sessions.** Restarting the server clears exams. Next step: persist sessions and track progress across mock exams.
-- **Gemini free-tier limits.** The Pro model has no quota on a free key, so all agents run on the Flash family. A paid key would let the blueprint and final grade use Pro.
+- **Gemini free-tier limits.** A free AI Studio key allows about 20 requests per model per day, and one exam uses about 20 calls. The client spreads load across five Flash models and skips any that are exhausted, but real use needs a billed key, or Google Cloud credits via Vertex AI (`GEMINI_USE_VERTEX=true`, `GOOGLE_CLOUD_PROJECT=...` in `.env`).
 - **Concurrency.** The Gradium account allows two concurrent sessions, so the server queues extra STT and TTS requests.
 - **Grounding** relies on slide text and Gemini's PDF reading. Slides that are mostly diagrams give thinner blueprints.
 - Ideas: interruptions and barge-in, per-professor difficulty settings, sharing a mock exam with a study group, and more exam languages (Gradium also offers French voices).

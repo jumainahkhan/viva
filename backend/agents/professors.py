@@ -52,7 +52,16 @@ Scoring:
 - proposed_followup: ONE question you would ask next, spoken aloud, max 25 words, in your own style.
   No lists, no markdown, no preamble like "Question:".
 
+{tuning}
+
 Write what_was_good, gaps and proposed_followup in {language}. Set professor to "{key}"."""
+
+TUNING = {
+    "gentle": "Tuning: GENTLE. The student is early in their preparation. Credit partial understanding generously, "
+              "keep follow-ups simple, and build a small hint into the question where it helps.",
+    "balanced": "Tuning: BALANCED. Score and question as a fair, realistic examiner would.",
+    "tough": "Tuning: TOUGH. Hold a top-grade bar: demand precision, probe assumptions and edge cases, score strictly.",
+}
 
 
 def format_context(session) -> str:
@@ -65,14 +74,17 @@ def format_context(session) -> str:
         f"A strong answer includes: {'; '.join(topic.strong_answer_includes)}\n"
         f"Common misconceptions: {'; '.join(topic.common_misconceptions)}\n\n"
         f"Slide text for this topic:\n{slides}\n\n"
-        f"Exam transcript so far:\n{session.transcript()}"
+        + (f"The student asked the panel to: {session.panel.focus}\n(Honour this where the slides allow.)\n\n"
+           if session.panel.focus else "")
+        + f"Exam transcript so far:\n{session.transcript()}"
     )
 
 
 async def assess(prof: Professor, session) -> ProfessorAssessment:
     p = PERSONAS[prof]
     system = SYSTEM.format(
-        name=p["name"], persona=p["persona"], language=LANG_NAME[session.language], key=prof
+        name=p["name"], persona=p["persona"], language=LANG_NAME[session.language], key=prof,
+        tuning=TUNING[session.panel.strictness.get(prof, "balanced")],
     )
     result = await generate(
         ProfessorAssessment,

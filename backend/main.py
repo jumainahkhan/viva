@@ -19,7 +19,7 @@ from agents.deliberation import final_report
 from agents.professors import PERSONAS
 from agents.revision import build_ics, revision_plan
 from exam import SESSIONS, ExamSession
-from schemas import ChairDecision
+from schemas import ChairDecision, PanelConfig
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
 log = logging.getLogger("viva.api")
@@ -100,7 +100,12 @@ async def create_session(
     exam_date: str | None = Form(None),
     num_questions: int = Form(6),
     language: str = Form("en"),
+    panel: str | None = Form(None, description="JSON PanelConfig: per-professor strictness and a focus note"),
 ) -> dict:
+    try:
+        panel_config = PanelConfig.model_validate_json(panel) if panel else PanelConfig()
+    except ValueError as e:
+        raise HTTPException(400, "The panel settings were not valid.") from e
     data = await pdf.read()
     if not data.startswith(b"%PDF"):
         raise HTTPException(400, "That file doesn't look like a PDF. Please upload your lecture slides as a PDF.")
@@ -121,6 +126,7 @@ async def create_session(
         language=language,
         num_questions=max(2, min(10, num_questions)),
         exam_date=date.fromisoformat(exam_date) if exam_date else None,
+        panel=panel_config,
     )
     SESSIONS[session.id] = session
     decision = await session.start()
@@ -131,6 +137,7 @@ async def create_session(
         "language": session.language,
         "blueprint": blueprint.model_dump(),
         "professors": [{"id": k, "name": v["name"], "tagline": v["tagline"]} for k, v in PERSONAS.items()],
+        "panel": session.panel.model_dump(),
         "turn": _turn_payload(session, decision, audio_url),
     }
 
@@ -204,7 +211,8 @@ async def report(session_id: str) -> dict:
         "course_title": session.blueprint.course_title,
         "topics": {t.id: t.title for t in session.blueprint.topics},
         "exam_date": session.exam_date.isoformat() if session.exam_date else None,
-        "transcript": [t.model_dump(exclude={"assessments"}) for t in session.turns],
+        "transcript": [t.model_dump() for t in session.turns if t.answer is not None],
+        "panel": session.panel.model_dump(),
     }
     session.plan = plan
     return session.report

@@ -4,7 +4,8 @@ from agents.professors import LANG_NAME, PERSONAS
 from gemini_client import generate
 from schemas import ChairDecision, Professor, ProfessorAssessment
 
-BLUFF_THRESHOLD = 0.6
+# The Skeptic's tuning sets how readily it pounces on a vague answer.
+BLUFF_THRESHOLD = {"gentle": 0.75, "balanced": 0.6, "tough": 0.45}
 MAX_QUESTIONS_PER_TOPIC = 2
 
 SYSTEM = """You chair a three-professor oral exam panel at a Swiss university. You decide who speaks next
@@ -36,8 +37,15 @@ CLOSING = {
 }
 
 
-def _personas() -> dict[str, str]:
-    return {k: v["persona"] for k, v in PERSONAS.items()}
+def _personas(session) -> dict[str, str]:
+    return {
+        k: f"{v['persona']} [Tuned: {session.panel.strictness.get(k, 'balanced')}]"
+        for k, v in PERSONAS.items()
+    }
+
+
+def _focus(session) -> str:
+    return f"\nThe student asked the panel to: {session.panel.focus}\n" if session.panel.focus else ""
 
 
 async def opening(session) -> ChairDecision:
@@ -46,8 +54,8 @@ async def opening(session) -> ChairDecision:
         ChairDecision,
         f"Course: {session.blueprint.course_title}\nOpening topic: {topic.title} (id: {topic.id})\n"
         f"Key concepts: {'; '.join(topic.key_concepts)}\n"
-        f"Slide text:\n{session.slide_text(topic.slide_refs)}",
-        system=OPENING_SYSTEM.format(language=LANG_NAME[session.language], **_personas()),
+        f"Slide text:\n{session.slide_text(topic.slide_refs)}" + _focus(session),
+        system=OPENING_SYSTEM.format(language=LANG_NAME[session.language], **_personas(session)),
     )
     decision.next_speaker = "theorist"
     decision.topic_id = topic.id
@@ -72,7 +80,8 @@ def constraints(session, assessments: list[ProfessorAssessment]) -> tuple[Profes
 
     forced: Professor | None = None
     max_bluff = max(a.bluff_signal for a in assessments)
-    if max_bluff > BLUFF_THRESHOLD and "skeptic" not in banned:
+    threshold = BLUFF_THRESHOLD[session.panel.strictness.get("skeptic", "balanced")]
+    if max_bluff > threshold and "skeptic" not in banned:
         forced = "skeptic"
 
     move_votes = sum(a.move_to_new_topic for a in assessments)
@@ -113,14 +122,14 @@ async def decide(session, assessments: list[ProfessorAssessment]) -> ChairDecisi
     topics = ", ".join(f"{t.id} ({t.title})" for t in session.blueprint.topics)
     prompt = (
         f"Course: {session.blueprint.course_title}\nAll topics: {topics}\n"
-        f"Topics already examined: {', '.join(session.covered_topic_ids()) or 'none'}\n\n"
+        f"Topics already examined: {', '.join(session.covered_topic_ids()) or 'none'}\n{_focus(session)}\n"
         f"Transcript:\n{session.transcript()}\n\nPanel assessments of the latest answer:\n{notes}\n\n"
         + "\n".join(rules)
     )
     decision = await generate(
         ChairDecision,
         prompt,
-        system=SYSTEM.format(language=LANG_NAME[session.language], **_personas()),
+        system=SYSTEM.format(language=LANG_NAME[session.language], **_personas(session)),
     )
 
     # Enforce the hard rules even if the model ignored them.

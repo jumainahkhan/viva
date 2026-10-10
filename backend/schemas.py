@@ -6,6 +6,15 @@ from pydantic import BaseModel, Field
 
 Professor = Literal["theorist", "practitioner", "skeptic"]
 Language = Literal["en", "de"]
+Strictness = Literal["gentle", "balanced", "tough"]
+
+
+class PanelConfig(BaseModel):
+    """How the student tuned the panel on the Setup screen."""
+    strictness: dict[Professor, Strictness] = Field(
+        default_factory=lambda: {"theorist": "balanced", "practitioner": "balanced", "skeptic": "balanced"}
+    )
+    focus: str = Field("", max_length=400, description="Free-text instruction from the student to the panel")
 
 
 # --- Blueprint -------------------------------------------------------------
@@ -58,11 +67,21 @@ class TopicFeedback(BaseModel):
     feedback: str
 
 
+class AnswerReview(BaseModel):
+    question_number: int
+    verdict: str = Field(description="One short phrase, e.g. 'Solid', 'Vague', 'Partly right'")
+    what_to_improve: str
+    stronger_answer: str = Field(description="A concise model answer in 2-4 spoken sentences, grounded in the slides")
+
+
 class FinalReport(BaseModel):
     deliberation: list[DeliberationLine]
     grade: float = Field(description="Swiss 1-6 scale, 0.25 steps, 4 = pass")
+    summary: str = Field(description="2-3 sentence overall analysis of the performance")
     strengths: list[str]
+    improvements: list[str] = Field(description="3-5 concrete, actionable things to work on, most important first")
     per_topic: list[TopicFeedback]
+    answer_reviews: list[AnswerReview]
     weakest_topics: list[str]
 
 

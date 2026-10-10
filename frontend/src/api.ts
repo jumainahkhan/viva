@@ -1,5 +1,11 @@
 export type ProfessorId = 'theorist' | 'practitioner' | 'skeptic'
 export type Language = 'en' | 'de'
+export type Strictness = 'gentle' | 'balanced' | 'tough'
+
+export interface PanelConfig {
+  strictness: Record<ProfessorId, Strictness>
+  focus: string
+}
 
 export interface Topic {
   id: string
@@ -35,6 +41,7 @@ export interface SessionResponse {
   session_id: string
   language: Language
   blueprint: { course_title: string; topics: Topic[] }
+  panel: PanelConfig
   turn: Turn
 }
 
@@ -49,8 +56,11 @@ export interface ReportResponse {
   report: {
     deliberation: { professor: ProfessorId; text: string }[]
     grade: number
+    summary: string
     strengths: string[]
+    improvements: string[]
     per_topic: { topic_id: string; score: number; feedback: string }[]
+    answer_reviews: { question_number: number; verdict: string; what_to_improve: string; stronger_answer: string }[]
     weakest_topics: string[]
   }
   plan: {
@@ -61,6 +71,8 @@ export interface ReportResponse {
   course_title: string
   topics: Record<string, string>
   exam_date: string | null
+  transcript: { speaker: ProfessorId; question: string; topic_id: string; answer: string; assessments: Assessment[] }[]
+  panel: PanelConfig
 }
 
 async function request<T>(url: string, body?: FormData): Promise<T> {
@@ -80,8 +92,9 @@ async function request<T>(url: string, body?: FormData): Promise<T> {
   return res.json()
 }
 
-export function createSession(pdf: File, examDate: string, numQuestions: number, language: Language) {
+export function createSession(pdf: File, examDate: string, numQuestions: number, language: Language, panel: PanelConfig) {
   const fd = new FormData()
+  fd.append('panel', JSON.stringify(panel))
   fd.append('pdf', pdf)
   if (examDate) fd.append('exam_date', examDate)
   fd.append('num_questions', String(numQuestions))
