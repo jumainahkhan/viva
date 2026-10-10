@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from datetime import date
 
 from agents import chair, professors
-from schemas import Blueprint, ChairDecision, Language, ProfessorAssessment, Topic, Turn
+from schemas import Blueprint, ChairDecision, Language, ProfessorAssessment, RevisionPlan, Topic, Turn
 
 
 @dataclass
@@ -19,6 +19,7 @@ class ExamSession:
     id: str = field(default_factory=lambda: uuid.uuid4().hex[:12])
     turns: list[Turn] = field(default_factory=list)
     report: dict | None = None
+    plan: RevisionPlan | None = None
 
     # --- state helpers used by the agents ---
 

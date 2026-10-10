@@ -76,3 +76,20 @@ async def list_voices(include_catalog: bool = True) -> list[dict]:
     if resp.status_code != 200:
         raise GradiumError(f"List voices failed ({resp.status_code}): {resp.text[:300]}")
     return resp.json()
+
+
+async def tts_stream(text: str, voice_id: str, output_format: str = "wav"):
+    """Yield audio bytes as Gradium generates them, so playback can start early."""
+    payload = {"text": text, "voice_id": voice_id, "output_format": output_format, "only_audio": True}
+    async with _SESSIONS, httpx.AsyncClient(timeout=TIMEOUT) as client:
+        async with client.stream(
+            "POST",
+            f"{GRADIUM_BASE_URL}/post/speech/tts",
+            headers=_headers(**{"Content-Type": "application/json"}),
+            json=payload,
+        ) as resp:
+            if resp.status_code != 200:
+                body = await resp.aread()
+                raise GradiumError(f"TTS failed ({resp.status_code}): {body[:300]!r}")
+            async for chunk in resp.aiter_bytes():
+                yield chunk
