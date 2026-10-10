@@ -1,0 +1,15 @@
+{
+  "tool_use_id": "toolu_01GvKfcKPPXzqkynwjir2Tra",
+  "agent_id": "a46d8b4133379a2ee",
+  "subagent_type": "general-purpose",
+  "task_description": "Research AI design telltales",
+  "token_usage": {
+    "input_tokens": 18,
+    "cache_creation_tokens": 82895,
+    "cache_read_tokens": 495159,
+    "output_tokens": 797,
+    "api_call_count": 9
+  },
+  "started_at": "2026-10-10T15:03:52.014587+02:00",
+  "completed_at": "2026-10-10T15:07:37.223779+02:00"
+}
