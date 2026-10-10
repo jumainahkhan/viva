@@ -231,7 +231,7 @@ async def audio(audio_id: str) -> Response:
     path = config.AUDIO_DIR / f"{audio_id}.wav"
     if path.exists():
         return FileResponse(path, media_type="audio/wav")
-    pending = _PENDING_AUDIO.pop(audio_id, None)
+    pending = _PENDING_AUDIO.get(audio_id)
     if pending is None:
         raise HTTPException(404, "Audio not found")
     text, voice = pending
@@ -244,9 +244,9 @@ async def audio(audio_id: str) -> Response:
                 yield chunk
         except Exception as e:  # the caption is already on screen; just end the audio
             log.warning("TTS stream failed: %s", e)
-            _PENDING_AUDIO[audio_id] = pending  # allow a retry
             return
         path.write_bytes(_fix_wav_header(b"".join(chunks)))  # cached for Replay
+        _PENDING_AUDIO.pop(audio_id, None)
 
     return StreamingResponse(relay(), media_type="audio/wav")
 
