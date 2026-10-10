@@ -1,0 +1,18 @@
+[project]
+name = "viva-backend"
+version = "0.1.0"
+description = "Viva: multi-agent oral exam panel (Gemini + Gradium)"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "python-multipart>=0.0.9",
+    "google-genai>=1.0",
+    "pydantic>=2.7",
+    "httpx>=0.27",
+    "python-dotenv>=1.0",
+    "pypdf>=4.0",
+]
+
+[tool.uv]
+package = false

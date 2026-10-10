@@ -7,3 +7,4 @@ dist/
 backend/out/
 backend/audio_cache/
 .DS_Store
+out/
