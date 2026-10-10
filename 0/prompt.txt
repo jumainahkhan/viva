@@ -1,0 +1,15 @@
+I dont like the design because it doesnt use the website space well, make it known that agents are used, and how we can maybe tune the agents to behave more in certain way, do a mock subagent that takes the oral exam I dont have the time to test right now, But the website should say prof this prof that, I want to market it as mock prep tool. And an analysis is given to the user along with transcripts and what to improve on
+
+---
+
+<task-notification>
+<task-id>bzy3wyv7x</task-id>
+<tool-use-id>toolu_014BfeEtNJM7uF9NDJXGm8WK</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-jumainahkhan-Documents-Programming-Claude-viva/4e4d4bdc-adf6-45c0-a77a-71bb0e72df24/tasks/bzy3wyv7x.output</output-file>
+<status>failed</status>
+<summary>Background command "Run strong German student with tuned panel" failed with exit code 1</summary>
+</task-notification>
+
+---
+
+this is how I need to install the gemini credits
